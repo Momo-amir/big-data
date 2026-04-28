@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Run once after the cluster is up to create HDFS directory structure.
+# Usage: bash scripts/init-hdfs.sh
+
+set -e
+
+NAMENODE=namenode
+
+echo "Waiting for HDFS to leave safe mode..."
+docker exec $NAMENODE hdfs dfsadmin -safemode wait
+
+echo "Creating HDFS directories..."
+docker exec $NAMENODE hdfs dfs -mkdir -p /data/raw/openaq
+docker exec $NAMENODE hdfs dfs -mkdir -p /data/processed/openaq
+docker exec $NAMENODE hdfs dfs -mkdir -p /data/stream/openaq
+docker exec $NAMENODE hdfs dfs -mkdir -p /checkpoints/openaq
+docker exec $NAMENODE hdfs dfs -mkdir -p /spark-logs
+
+docker exec $NAMENODE hdfs dfs -chmod -R 777 /data
+docker exec $NAMENODE hdfs dfs -chmod -R 777 /checkpoints
+docker exec $NAMENODE hdfs dfs -chmod -R 777 /spark-logs
+
+echo "HDFS directory structure ready."
+docker exec $NAMENODE hdfs dfs -ls /

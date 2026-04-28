@@ -1,0 +1,100 @@
+services:
+
+  namenode:
+    image: apache/hadoop:3.5.0
+    hostname: namenode
+    container_name: namenode
+    user: root
+    environment:
+      HADOOP_NODE: namenode
+    volumes:
+      - ./hadoop/config:/opt/hadoop/etc/hadoop:ro
+      - namenode-data:/tmp/hadoop-root/dfs/name
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    networks:
+      - etl-net
+    command: ["hdfs", "namenode"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9870/dfshealth.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  datanode:
+    image: apache/hadoop:3.5.0
+    hostname: datanode
+    container_name: datanode
+    user: root
+    environment:
+      HADOOP_NODE: datanode
+    volumes:
+      - ./hadoop/config:/opt/hadoop/etc/hadoop:ro
+      - datanode-data:/tmp/hadoop-datanode/dfs/data
+    depends_on:
+      namenode:
+        condition: service_healthy
+    networks:
+      - etl-net
+    command: ["hdfs", "datanode"]
+
+  spark-master:
+    image: apache/spark:4.1.1
+    hostname: spark-master
+    container_name: spark-master
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+    volumes:
+      - ./spark/config/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ./spark/jobs:/opt/spark/jobs:ro
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    networks:
+      - etl-net
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+
+  spark-worker:
+    image: apache/spark:4.1.1
+    hostname: spark-worker
+    container_name: spark-worker
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_WORKER_MEMORY: 2g
+      SPARK_WORKER_CORES: "2"
+    volumes:
+      - ./spark/config/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    depends_on:
+      - spark-master
+    ports:
+      - "8081:8081"
+    networks:
+      - etl-net
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+
+  etl-runner:
+    build: ./etl
+    container_name: etl-runner
+    environment:
+      HDFS_URL: http://namenode:9870
+      OPENAQ_URL: https://api.openaq.org/v2/measurements
+      OPENAQ_COUNTRY: DK
+      OPENAQ_LIMIT: "1000"
+      SPARK_MASTER_URL: spark://spark-master:7077
+    volumes:
+      - ./spark/jobs:/opt/spark/jobs:ro
+    depends_on:
+      namenode:
+        condition: service_healthy
+    networks:
+      - etl-net
+
+volumes:
+  namenode-data:
+  datanode-data:
+
+networks:
+  etl-net:
+    driver: bridge
