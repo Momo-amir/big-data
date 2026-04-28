@@ -73,7 +73,7 @@ services:
       SPARK_NO_DAEMONIZE: "true"
     volumes:
       - ./spark/config/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
-      - ./spark/jobs:/opt/spark/jobs:ro
+      - ./src/modules:/opt/spark/jobs:ro
     ports:
       - "8080:8080"
       - "7077:7077"
@@ -100,7 +100,7 @@ services:
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
 
   etl-runner:
-    build: ./etl
+    build: .
     container_name: etl-runner
     environment:
       HDFS_URL: http://namenode:9870
@@ -109,7 +109,8 @@ services:
       OPENAQ_LIMIT: "1000"
       SPARK_MASTER_URL: spark://spark-master:7077
     volumes:
-      - ./spark/jobs:/opt/spark/jobs:ro
+      - ./src:/app
+      - ./src/modules:/opt/spark/jobs:ro
     depends_on:
       namenode:
         condition: service_healthy
