@@ -140,6 +140,14 @@ docker exec namenode hdfs dfs -ls /
 # 5. On subsequent starts (no rebuild needed)
 docker compose up -d
 
+
+# 6. To enter the ETL runner container and run Python commands interactively:
+docker exec -it etl-runner bash
+
+# Inside the container, you can run Python scripts or start a REPL:
+python main.py
+
+
 ```
 
 **Verify the cluster is healthy:**

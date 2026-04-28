@@ -1,10 +1,10 @@
 services:
 
   # Formats the namenode storage directory once, then exits.
-  # Uses a condition file so re-running `docker compose up` is safe —
-  # the format only runs if /tmp/hadoop-root/dfs/name/current is absent.
+  # Skips if already formatted so re-running `docker compose up` is safe.
   namenode-init:
     image: apache/hadoop:3.5.0
+    platform: linux/amd64
     container_name: namenode-init
     user: root
     volumes:
@@ -24,6 +24,7 @@ services:
 
   namenode:
     image: apache/hadoop:3.5.0
+    platform: linux/amd64
     hostname: namenode
     container_name: namenode
     user: root
@@ -42,14 +43,15 @@ services:
         condition: service_completed_successfully
     command: ["hdfs", "namenode"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9870/dfshealth.html"]
+      test: ["CMD", "curl", "-f", "http://localhost:9870/jmx?qry=Hadoop:service=NameNode,name=NameNodeStatus"]
       interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
+      timeout: 15s
+      retries: 15
+      start_period: 90s
 
   datanode:
     image: apache/hadoop:3.5.0
+    platform: linux/amd64
     hostname: datanode
     container_name: datanode
     user: root
@@ -102,6 +104,7 @@ services:
   etl-runner:
     build: .
     container_name: etl-runner
+    command: ["tail", "-f", "/dev/null"]
     environment:
       HDFS_URL: http://namenode:9870
       OPENAQ_URL: https://api.openaq.org/v2/measurements
