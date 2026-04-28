@@ -1,5 +1,27 @@
 services:
 
+  # Formats the namenode storage directory once, then exits.
+  # Uses a condition file so re-running `docker compose up` is safe —
+  # the format only runs if /tmp/hadoop-root/dfs/name/current is absent.
+  namenode-init:
+    image: apache/hadoop:3.5.0
+    container_name: namenode-init
+    user: root
+    volumes:
+      - ./hadoop/config:/opt/hadoop/etc/hadoop:ro
+      - namenode-data:/tmp/hadoop-root/dfs/name
+    networks:
+      - etl-net
+    command: >
+      sh -c "
+        if [ ! -d /tmp/hadoop-root/dfs/name/current ]; then
+          hdfs namenode -format -force -nonInteractive &&
+          echo 'Namenode formatted successfully.';
+        else
+          echo 'Namenode already formatted, skipping.';
+        fi
+      "
+
   namenode:
     image: apache/hadoop:3.5.0
     hostname: namenode
@@ -15,6 +37,9 @@ services:
       - "9000:9000"
     networks:
       - etl-net
+    depends_on:
+      namenode-init:
+        condition: service_completed_successfully
     command: ["hdfs", "namenode"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9870/dfshealth.html"]
