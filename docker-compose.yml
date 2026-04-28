@@ -43,7 +43,7 @@ services:
         condition: service_completed_successfully
     command: ["hdfs", "namenode"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9870/jmx?qry=Hadoop:service=NameNode,name=NameNodeStatus"]
+      test: ["CMD", "curl", "-f", "http://namenode:9870/jmx?qry=Hadoop:service=NameNode,name=NameNodeStatus"]
       interval: 30s
       timeout: 15s
       retries: 15
@@ -103,6 +103,7 @@ services:
 
   etl-runner:
     build: .
+    platform: linux/amd64
     container_name: etl-runner
     command: ["tail", "-f", "/dev/null"]
     environment:
