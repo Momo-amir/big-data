@@ -16,6 +16,7 @@ Run from inside the etl-runner container:
 import os
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 
 from modules.security import encrypt
 from modules.load import save_csv, save_to_hive
@@ -25,6 +26,8 @@ from modules.kafka_producer import stream_to_kafka
 SPARK_MASTER = os.getenv("SPARK_MASTER_URL", "spark://spark-master:7077")
 HDFS_INPUT_DIR = "hdfs://namenode:9000/data/Input_dir"
 CHECKPOINT_DIR = "hdfs://namenode:9000/checkpoints/stream"
+HIVE_WAREHOUSE = "hdfs://namenode:9000/user/hive/warehouse"
+HIVE_METASTORE = "thrift://hive-metastore:9083"
 IRIS_COLUMNS = ["sepal_length", "sepal_width", "petal_length", "petal_width", "species"]
 
 
@@ -33,6 +36,9 @@ def _get_spark() -> SparkSession:
         SparkSession.builder
         .appName("IrisRealTimeETL")
         .master(SPARK_MASTER)
+        .config("spark.sql.warehouse.dir", HIVE_WAREHOUSE)
+        .config("hive.metastore.uris", HIVE_METASTORE)
+        .config("hive.exec.scratchdir", "hdfs://namenode:9000/tmp/hive-scratch")
         .enableHiveSupport()
         .getOrCreate()
     )
@@ -69,20 +75,27 @@ def _process_batch(batch_df, batch_id: int, spark: SparkSession) -> None:
     print(f"[stream] Batch {batch_id} complete.")
 
 
+IRIS_SCHEMA = StructType([
+    StructField("sepal_length", DoubleType(), True),
+    StructField("sepal_width",  DoubleType(), True),
+    StructField("petal_length", DoubleType(), True),
+    StructField("petal_width",  DoubleType(), True),
+    StructField("species",      StringType(), True),
+])
+
+
 def run() -> None:
     spark = _get_spark()
 
-    schema = (
-        spark.read
-        .csv(f"{HDFS_INPUT_DIR}/iris.csv", header=True, inferSchema=True)
-        .schema
-    )
-
+    # Use a static schema so the stream can start before any file arrives
+    # and without accidentally re-reading old files for schema inference.
     stream = (
         spark.readStream
-        .schema(schema)
+        .schema(IRIS_SCHEMA)
         .option("header", "true")
         .option("maxFilesPerTrigger", 1)
+        # latestFirst=false ensures oldest new file is processed first
+        .option("latestFirst", "false")
         .csv(HDFS_INPUT_DIR)
     )
 

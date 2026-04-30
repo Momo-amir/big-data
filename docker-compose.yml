@@ -41,11 +41,11 @@ services:
         condition: service_completed_successfully
     command: ["hdfs", "namenode"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://namenode:9870/jmx?qry=Hadoop:service=NameNode,name=NameNodeStatus"]
+      test: ["CMD-SHELL", "curl -sf http://namenode:9870/jmx?qry=Hadoop:service=NameNode,name=NameNodeStatus"]
       interval: 30s
       timeout: 15s
-      retries: 15
-      start_period: 90s
+      retries: 20
+      start_period: 180s
 
   datanode:
     image: apache/hadoop:3.5.0
@@ -67,6 +67,7 @@ services:
 
   spark-master:
     image: apache/spark:4.1.1
+    platform: linux/amd64
     hostname: spark-master
     container_name: spark-master
     environment:
@@ -83,6 +84,7 @@ services:
 
   spark-worker:
     image: apache/spark:4.1.1
+    platform: linux/amd64
     hostname: spark-worker
     container_name: spark-worker
     environment:
@@ -103,6 +105,7 @@ services:
 
   mysql:
     image: mysql:8.0
+    platform: linux/amd64
     container_name: mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
@@ -125,7 +128,10 @@ services:
   # ── Apache Hive ───────────────────────────────────────────────────────────
 
   hive-metastore:
-    image: apache/hive:4.0.0
+    build:
+      context: ./hive
+      dockerfile: Dockerfile
+    platform: linux/amd64
     container_name: hive-metastore
     hostname: hive-metastore
     environment:
@@ -149,14 +155,18 @@ services:
     networks:
       - etl-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9083/ || exit 1"]
-      interval: 30s
+      # 9083 in hex = 237B
+      test: ["CMD-SHELL", "grep -q '237B' /proc/net/tcp6 2>/dev/null || grep -q '237B' /proc/net/tcp 2>/dev/null"]
+      interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 60s
+      retries: 30
+      start_period: 90s
 
   hive-server:
-    image: apache/hive:4.0.0
+    build:
+      context: ./hive
+      dockerfile: Dockerfile
+    platform: linux/amd64
     container_name: hive-server
     hostname: hive-server
     environment:
@@ -179,15 +189,19 @@ services:
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.1
+    platform: linux/amd64
     container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper
     networks:
       - etl-net
 
   kafka:
     image: confluentinc/cp-kafka:7.6.1
+    platform: linux/amd64
     container_name: kafka
     hostname: kafka
     depends_on:
@@ -240,6 +254,7 @@ volumes:
   datanode-data:
   mysql-data:
   hive-warehouse:
+  zookeeper-data:
 
 networks:
   etl-net:
