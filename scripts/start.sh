@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Full cluster startup + ETL pipeline runner.
 # Usage:
-#   bash scripts/start.sh          — start cluster + run batch pipeline
-#   bash scripts/start.sh stream   — start cluster + run streaming pipeline
-#   bash scripts/start.sh batch    — same as default
-#   bash scripts/start.sh hive     — query Hive after pipeline has run
+#   bash scripts/start.sh          — start cluster + run ALL pipelines
+#   bash scripts/start.sh batch    — start cluster + batch only
+#   bash scripts/start.sh stream   — start cluster + streaming only
+#   bash scripts/start.sh hive     — query Hive only
 
 set -e
 
-MODE="${1:-batch}"
+MODE="${1:-all}"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -31,10 +31,14 @@ wait_healthy() {
   echo " healthy."
 }
 
-# ── Step 1: start the cluster ─────────────────────────────────────────────────
+# ── Step 1: start the cluster (skip if already up) ───────────────────────────
 
-log "Starting cluster..."
-docker compose up -d
+if [ "$(docker inspect namenode --format '{{.State.Running}}' 2>/dev/null)" = "true" ]; then
+  log "Cluster already running, skipping docker compose up."
+else
+  log "Starting cluster..."
+  docker compose up -d
+fi
 
 wait_healthy namenode
 wait_healthy mysql
@@ -48,10 +52,14 @@ if ! wait_healthy kafka 2>/dev/null; then
 fi
 wait_healthy kafka
 
-# ── Step 2: init HDFS dirs (idempotent) ──────────────────────────────────────
+# ── Step 2: init HDFS dirs (once only) ───────────────────────────────────────
 
-log "Initialising HDFS directories..."
-bash "$(dirname "$0")/init-hdfs.sh"
+if docker exec namenode hdfs dfs -test -d /data/Input_dir 2>/dev/null; then
+  log "HDFS directories already exist, skipping init."
+else
+  log "Initialising HDFS directories..."
+  bash "$(dirname "$0")/init-hdfs.sh"
+fi
 
 # ── Step 3: wait for hive-metastore ──────────────────────────────────────────
 
@@ -59,42 +67,54 @@ wait_healthy hive-metastore
 
 # ── Step 4: run the pipeline ──────────────────────────────────────────────────
 
+run_batch() {
+  log "Running batch pipeline..."
+  docker exec etl-runner python main.py
+  log "Batch pipeline complete. Output:"
+  docker exec namenode hdfs dfs -ls /data/Output_dir
+}
+
+run_stream() {
+  log "Starting streaming pipeline..."
+  log "Starting Kafka consumer in background (logs → /tmp/consumer.log)..."
+  docker exec -d etl-runner sh -c "python consumer.py > /tmp/consumer.log 2>&1"
+
+  log "Starting stream watcher in background (logs → /tmp/stream.log)..."
+  docker exec -d etl-runner sh -c "python -m modules.transform_stream > /tmp/stream.log 2>&1"
+
+  sleep 3
+  log "Triggering extract (stream will auto-process)..."
+  docker exec etl-runner python extract_only.py
+
+  log "Streaming pipeline running. Follow logs with:"
+  echo "  docker exec etl-runner tail -f /tmp/consumer.log"
+  echo "  docker exec etl-runner tail -f /tmp/stream.log"
+}
+
+run_hive() {
+  log "Querying Hive..."
+  docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 \
+    -e "SELECT * FROM irisdb.iris_setosa LIMIT 5;"
+}
+
 case "$MODE" in
-
+  all)
+    run_batch
+    run_stream
+    run_hive
+    ;;
   batch)
-    log "Running batch pipeline..."
-    docker exec etl-runner python main.py
-    log "Batch pipeline complete. Output:"
-    docker exec namenode hdfs dfs -ls /data/Output_dir
+    run_batch
     ;;
-
   stream)
-    log "Starting streaming pipeline..."
-    log "Starting Kafka consumer in background (logs → /tmp/consumer.log)..."
-    docker exec -d etl-runner sh -c "python consumer.py > /tmp/consumer.log 2>&1"
-
-    log "Starting stream watcher in background (logs → /tmp/stream.log)..."
-    docker exec -d etl-runner sh -c "python -m modules.transform_stream > /tmp/stream.log 2>&1"
-
-    sleep 3
-    log "Triggering extract (stream will auto-process)..."
-    docker exec etl-runner python extract_only.py
-
-    log "Streaming pipeline running. Follow logs with:"
-    echo "  docker exec etl-runner tail -f /tmp/consumer.log"
-    echo "  docker exec etl-runner tail -f /tmp/stream.log"
+    run_stream
     ;;
-
   hive)
-    log "Querying Hive..."
-    docker exec hive-server beeline -u jdbc:hive2://localhost:10000 \
-      -e "SELECT * FROM irisdb.iris_setosa LIMIT 5;"
+    run_hive
     ;;
-
   *)
     echo "Unknown mode: $MODE"
-    echo "Usage: $0 [batch|stream|hive]"
+    echo "Usage: $0 [all|batch|stream|hive]"
     exit 1
     ;;
-
 esac
