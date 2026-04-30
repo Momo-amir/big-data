@@ -141,7 +141,7 @@ docker exec namenode hdfs dfs -ls /
 docker compose up -d
 
 
-# 6. To enter the ETL runner container and run Python commands interactively:
+# 6. To enter the ETL runner container and run Pyt  hon commands interactively:
 docker exec -it etl-runner bash
 
 # Inside the container, you can run Python scripts or start a REPL:
@@ -179,14 +179,43 @@ docker exec etl-runner python extract.py
 
 ---
 
-### What You Need to Implement
+# 1. Copy and fill in your AES key
 
-All `TODO` comments mark the work to be done. Suggested order:
+cp .env.example .env
 
-1. [src/utils/validation.py](src/utils/validation.py) — URL validation and HTTPS enforcement
-2. [src/utils/hdfs_client.py](src/utils/hdfs_client.py) — HDFS connection and chunk-write helpers
-3. [src/modules/extract.py](src/modules/extract.py) — chunked download streamed directly to HDFS
-4. [src/modules/transform_batch.py](src/modules/transform_batch.py) — PySpark batch filter + CSV write
-5. [src/modules/transform_stream.py](src/modules/transform_stream.py) — PySpark structured streaming job
-6. [src/submit_jobs.py](src/submit_jobs.py) — injection-safe `spark-submit` wrapper
-7. [src/main.py](src/main.py) — orchestrates extract → submit batch job → done
+# Set AES_KEY to: python -c "import os; print(os.urandom(32).hex())"
+
+# 2. Start all services
+
+docker compose up -d
+
+# 3. Create HDFS directories (run once)
+
+bash scripts/init-hdfs.sh
+
+# --- BATCH pipeline ---
+
+docker exec etl-runner python main.py
+
+# --- REAL-TIME pipeline ---
+
+# Terminal 1: start the consumer
+
+docker exec etl-runner python consumer.py
+
+# Terminal 2: start the background stream watcher
+
+docker exec etl-runner python -m modules.transform_stream
+
+# Terminal 3: trigger extract (stream auto-processes it)
+
+docker exec etl-runner python extract_only.py
+
+# --- Verify in Hive (Beeline) ---
+
+docker exec hive-server beeline -u jdbc:hive2://localhost:10000 \
+ -e "SELECT \* FROM irisdb.iris_setosa LIMIT 5;"
+
+# --- View diagrams from HDFS ---
+
+docker exec namenode hdfs dfs -ls /data/Output_dir
