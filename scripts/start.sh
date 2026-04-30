@@ -92,6 +92,7 @@ run_stream() {
 }
 
 run_hive() {
+  wait_healthy hive-server
   log "Querying Hive..."
   docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 \
     -e "SELECT * FROM irisdb.iris_setosa LIMIT 5;"
