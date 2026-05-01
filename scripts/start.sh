@@ -63,7 +63,7 @@ fi
 
 # ── Step 3: wait for hive-metastore ──────────────────────────────────────────
 
-wait_healthy hive-metastore
+#wait_healthy hive-metastore
 
 # ── Step 4: run the pipeline ──────────────────────────────────────────────────
 
