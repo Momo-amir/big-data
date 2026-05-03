@@ -78,13 +78,20 @@ run_batch() {
 
 run_stream() {
   log "Starting streaming pipeline..."
+
+  # Clear checkpoint and Input_dir so the stream sees the next extract as a new file.
+  # Structured Streaming skips files it has already processed (tracked by checkpoint),
+  # so without this a re-run after batch would never trigger.
+  docker exec namenode hdfs dfs -rm -r -f /checkpoints/stream
+  docker exec namenode hdfs dfs -rm -f /data/Input_dir/iris.csv
+
   log "Starting Kafka consumer in background (logs → /tmp/consumer.log)..."
   docker exec -d etl-runner sh -c "python consumer.py > /tmp/consumer.log 2>&1"
 
   log "Starting stream watcher in background (logs → /tmp/stream.log)..."
   docker exec -d etl-runner sh -c "python -m modules.transform_stream > /tmp/stream.log 2>&1"
 
-  sleep 3
+  sleep 5
   log "Triggering extract (stream will auto-process)..."
   docker exec etl-runner python extract_only.py
 
