@@ -15,6 +15,7 @@ docker exec $NAMENODE hdfs dfs -mkdir -p /data/Output_dir
 docker exec $NAMENODE hdfs dfs -mkdir -p /checkpoints/stream
 docker exec $NAMENODE hdfs dfs -mkdir -p /spark-logs
 docker exec $NAMENODE hdfs dfs -mkdir -p /user/hive/warehouse
+docker exec $NAMENODE hdfs dfs -mkdir -p /tmp/hive
 docker exec $NAMENODE hdfs dfs -mkdir -p /tmp/hive-scratch
 
 docker exec $NAMENODE hdfs dfs -chmod -R 777 /data

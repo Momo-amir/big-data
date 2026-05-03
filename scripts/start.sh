@@ -52,18 +52,20 @@ if ! wait_healthy kafka 2>/dev/null; then
 fi
 wait_healthy kafka
 
-# ── Step 2: init HDFS dirs (once only) ───────────────────────────────────────
+# ── Step 2: init HDFS dirs (idempotent) ──────────────────────────────────────
+# ÆNDRET: kør altid init-hdfs.sh. Scriptet bruger mkdir -p og chmod, så det er
+# sikkert at køre igen, og nye nødvendige dirs som /tmp/hive bliver ikke sprunget
+# over bare fordi /data/Input_dir allerede findes fra en tidligere kørsel.
 
-if docker exec namenode hdfs dfs -test -d /data/Input_dir 2>/dev/null; then
-  log "HDFS directories already exist, skipping init."
-else
-  log "Initialising HDFS directories..."
-  bash "$(dirname "$0")/init-hdfs.sh"
-fi
+log "Ensuring HDFS directories and permissions..."
+bash "$(dirname "$0")/init-hdfs.sh"
 
 # ── Step 3: wait for hive-metastore ──────────────────────────────────────────
+# ÆNDRET: hive-metastore skal være healthy før batch/stream, fordi Spark skriver
+# til Hive via metastore. HiveServer2 skal derimod kun bruges til Beeline-queryen
+# i run_hive(), så en global wait her blokerer unødigt batch/stream modes.
 
-#wait_healthy hive-metastore
+wait_healthy hive-metastore
 
 # ── Step 4: run the pipeline ──────────────────────────────────────────────────
 
@@ -92,9 +94,12 @@ run_stream() {
 }
 
 run_hive() {
+  # ÆNDRET: HiveServer2 ventes kun her, fordi kun Beeline-queryen kræver port 10000.
+  # Batch- og stream-pipelines bruger metastore direkte og skal ikke blokeres af
+  # en langsom HiveServer2-opstart.
   wait_healthy hive-server
   log "Querying Hive..."
-  docker exec hive-server beeline -u jdbc:hive2://hive-server:10000 \
+  docker exec hive-server beeline -n hive -u jdbc:hive2://hive-server:10000 \
     -e "SELECT * FROM irisdb.iris_setosa LIMIT 5;"
 }
 

@@ -24,6 +24,34 @@
     <value>hivepass</value>
   </property>
 
+  <!-- Disable notification event poll (Hive 4.x / MySQL fix) -->
+  <!-- HiveServer2 hangs on get_current_notificationEventId when NOTIFICATION_LOG -->
+  <!-- table is not fully initialised. Disabling auth + poll avoids the hang.    -->
+  <property>
+    <name>hive.metastore.event.db.notification.api.auth</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>hive.notification.event.poll.interval</name>
+    <value>-1</value>
+  </property>
+
+  <!-- Force Hive scratch work onto a pre-created HDFS dir with open write perms. -->
+  <!-- Without this, HiveServer2 falls back to /tmp/hive and creates it as 755, -->
+  <!-- then aborts because the scratch root must be writable by all sessions. -->
+  <property>
+    <name>hive.exec.scratchdir</name>
+    <value>/tmp/hive-scratch</value>
+  </property>
+
+  <!-- Beeline in this project should execute as the connected user, not try to -->
+  <!-- impersonate another HDFS user. With doAs enabled, HiveServer2 rejects the -->
+  <!-- local container user and start.sh hive mode fails even though the server is up. -->
+  <property>
+    <name>hive.server2.enable.doAs</name>
+    <value>false</value>
+  </property>
+
   <!-- Allow Spark to write to Hive tables without transactions -->
   <property>
     <name>hive.support.concurrency</name>
