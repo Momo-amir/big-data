@@ -13,7 +13,9 @@ from kafka import KafkaConsumer
 
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "iris-setosa")
-KAFKA_GROUP = os.getenv("KAFKA_GROUP_ID", "iris-consumer-group")
+# No persistent group — each run replays all messages from offset 0,
+# which is what we want for a live demo (and for --auto_offset_reset=earliest to apply).
+KAFKA_GROUP = os.getenv("KAFKA_GROUP_ID", None)
 
 
 def main() -> None:
@@ -25,7 +27,7 @@ def main() -> None:
         bootstrap_servers=KAFKA_BOOTSTRAP,
         group_id=KAFKA_GROUP,
         auto_offset_reset="earliest",
-        enable_auto_commit=True,
+        enable_auto_commit=False,
         value_deserializer=lambda b: json.loads(b.decode("utf-8")),
     )
 

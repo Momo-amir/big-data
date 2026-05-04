@@ -110,6 +110,11 @@ run_hive() {
     -e "SELECT * FROM irisdb.iris_setosa LIMIT 5;"
 }
 
+show_consumer() {
+  log "Running Kafka consumer (live, Ctrl+C to stop)..."
+  docker exec -it etl-runner python consumer.py
+}
+
 case "$MODE" in
   all)
     run_batch
@@ -125,9 +130,12 @@ case "$MODE" in
   hive)
     run_hive
     ;;
+  consumer)
+    show_consumer
+    ;;
   *)
     echo "Unknown mode: $MODE"
-    echo "Usage: $0 [all|batch|stream|hive]"
+    echo "Usage: $0 [all|batch|stream|hive|consumer]"
     exit 1
     ;;
 esac
